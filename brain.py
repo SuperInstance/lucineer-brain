@@ -143,7 +143,7 @@ def load_api_key() -> str:
     if ENV_PATH.exists():
         for line in ENV_PATH.read_text().splitlines():
             line = line.strip()
-            if line.startswith("DEEPINFRA_API_KEY="):
+            if line.startswith("DEEPINFRA_API_KEY=***REDACTED***
                 key = line.split("=", 1)[1].strip().strip('"').strip("'")
                 if key:
                     return key
