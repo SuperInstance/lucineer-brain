@@ -38,9 +38,9 @@ ENV_PATH = Path("/home/eileen/mcp-deeinfra/.env")
 API_BASE = "https://api.deepinfra.com/v1/openai"
 
 MODELS = {
-    "intent":  "ByteDance/Seed-2.0-mini",
-    "planner": "Qwen/Qwen3.6-35B-A3B",
-    "deep":    "ByteDance/Seed-2.0-pro",
+    "intent":  "Qwen/Qwen2.5-72B-Instruct",
+    "planner": "Qwen/Qwen3-30B-A3B",
+    "deep":    "Qwen/Qwen3-235B-A22B-Instruct-2507",
     "coder":   "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
     "hermes":  "NousResearch/Hermes-3-Llama-3.1-405B",
 }
@@ -49,7 +49,7 @@ MODELS = {
 # Capped at 2 total (primary + 1 fallback) to keep within DEEP_TIMEOUT budget.
 # Previously had 5 models in the chain which could take 10+ minutes worst case.
 PLANNER_FALLBACKS = [
-    "Qwen/Qwen3-35B-A3B",   # one fallback only
+    "Qwen/Qwen3-30B-A3B",   # one fallback only
 ]
 
 # Max tokens — reasoning models need headroom; Hermes needs room for lore
