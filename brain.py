@@ -7,6 +7,9 @@ Routes player natural language through a pipeline of DeepInfra models:
   2. Qwen/Qwen3.6-35B-A3B                  → spatial planning (decompose into steps)
      OR ByteDance/Seed-2.0-pro             → deep planning (complex builds)
   3. Qwen/Qwen3-Coder-480B-A35B            → Luau command generation
+     ↓ on 429: Qwen3-Coder-30B-A3B          → smaller coder, less rate-limited
+     ↓ on 429: DeepSeek-V3                   → different provider, cheap
+     ↓ all fail: fast mode (Seed-2.0-mini)   → ultimate last resort
   4. NousResearch/Hermes-3-Llama-3.1-405B  → personality/lore wrapping (creative mode)
 
 Outputs JSON matching Lucineer's CommandExecutor schema:
@@ -50,6 +53,15 @@ MODELS = {
 # Previously had 5 models in the chain which could take 10+ minutes worst case.
 PLANNER_FALLBACKS = [
     "Qwen/Qwen3-30B-A3B",   # one fallback only
+]
+
+# Coder fallback chain — tried in order when Stage 3 (command generation) hits 429s.
+# Each model gets its full retry budget before we move to the next.
+# The fast-mode single-model path (run_fast) is the ultimate last resort.
+CODER_FALLBACKS = [
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",   # Primary: best quality
+    "Qwen/Qwen3-Coder-30B-A3B-Instruct",            # Fallback 1: smaller, less rate-limited
+    "deepseek-ai/DeepSeek-V3",                        # Fallback 2: different provider, cheap
 ]
 
 # Max tokens — reasoning models need headroom; Hermes needs room for lore
@@ -711,7 +723,13 @@ def stage_plan(
 
 
 def stage_commands(api_key: str, plan: dict, intent: dict, player_message: str) -> dict:
-    """Stage 3: Generate build commands with Qwen3-Coder-480B."""
+    """
+    Stage 3: Generate build commands.
+
+    Tries coder models in order (CODER_FALLBACKS) with full retry budget each.
+    Only fails if every model in the chain is exhausted.
+    The caller (run_pipeline) will then drop to fast mode as the ultimate last resort.
+    """
     t0 = time.time()
 
     # Strip metadata
@@ -721,36 +739,70 @@ def stage_commands(api_key: str, plan: dict, intent: dict, player_message: str) 
     )
     intent_brief = intent.get("summary", player_message)
 
-    raw = call_model(
-        api_key,
-        MODELS["coder"],
-        messages=[
-            {"role": "system", "content": SYSTEM_CODER},
-            {
-                "role": "user",
-                "content": (
-                    f"Player wants: \"{player_message}\"\n"
-                    f"Intent summary: {intent_brief}\n\n"
-                    f"Build plan:\n{plan_clean}\n\n"
-                    f"Generate the build commands JSON now. ONLY raw JSON, no markdown."
-                ),
-            },
-        ],
-        max_tokens=MAX_TOKENS["coder"],
-        temperature=Temperatures["coder"],
+    user_content = (
+        f"Player wants: \"{player_message}\"\n"
+        f"Intent summary: {intent_brief}\n\n"
+        f"Build plan:\n{plan_clean}\n\n"
+        f"Generate the build commands JSON now. ONLY raw JSON, no markdown."
     )
+
+    raw = None
+    used_model = None
+    errors = []
+
+    for model_id in CODER_FALLBACKS:
+        try:
+            raw = call_model(
+                api_key,
+                model_id,
+                messages=[
+                    {"role": "system", "content": SYSTEM_CODER},
+                    {"role": "user", "content": user_content},
+                ],
+                max_tokens=MAX_TOKENS["coder"],
+                temperature=Temperatures["coder"],
+            )
+            used_model = model_id
+            break
+        except RuntimeError as e:
+            errors.append(f"{model_id}: {e}")
+            if "429" in str(e) or "busy" in str(e).lower():
+                print(f"  \u26a0 {model_id} rate-limited (429), trying next coder fallback...", file=sys.stderr)
+            else:
+                print(f"  \u26a0 {model_id} error, trying next coder fallback...", file=sys.stderr)
+            continue
+
     elapsed = time.time() - t0
+
+    if raw is None:
+        # All coder models failed — caller should drop to fast mode
+        return {
+            "reply": "",
+            "commands": [],
+            "error": "All coder models failed",
+            "details": errors,
+            "_meta": {
+                "model": "none",
+                "latency_s": round(elapsed, 2),
+                "fallbacks_tried": len(errors),
+                "all_failed": True,
+            },
+        }
 
     parsed = extract_json(raw)
     if not parsed or not isinstance(parsed, dict):
-        # Last resort: return what we got
         parsed = {
             "reply": f"I tried to build that but had trouble generating the commands. Raw output: {raw[:200]}",
             "commands": [],
             "error": "JSON parse failed",
         }
 
-    parsed["_meta"] = {"model": MODELS["coder"], "latency_s": round(elapsed, 2), "raw": raw[:200]}
+    parsed["_meta"] = {
+        "model": used_model,
+        "latency_s": round(elapsed, 2),
+        "raw": raw[:200],
+        "fallbacks_tried": len(errors),
+    }
     return parsed
 
 
@@ -872,14 +924,25 @@ def run_pipeline(
     if verbose:
         print(f"  \u2713 {n_steps} steps planned ({timings['planning']}s, {used})", file=sys.stderr)
 
-    # Stage 3: Command generation
+    # Stage 3: Command generation (with coder fallback chain)
     if verbose:
-        print("→ Stage 3: Command generation (Qwen3-Coder-480B)...", file=sys.stderr)
+        print("→ Stage 3: Command generation (Qwen3-Coder-480B → fallbacks)...", file=sys.stderr)
     result = stage_commands(api_key, plan, intent, player_message)
+
+    # If all coder models failed, drop to fast mode as last resort
+    if result.get("_meta", {}).get("all_failed"):
+        if verbose:
+            print("  \u2715 All coder models exhausted — falling back to fast mode", file=sys.stderr)
+        result = run_fast(api_key, player_message, verbose=verbose, creative=creative)
+        result["_pipeline"]["coder_fallback_exhausted"] = True
+        return result
+
     timings["commands"] = result["_meta"]["latency_s"]
     n_cmds = len(result.get("commands", []))
+    used = result["_meta"].get("model", "?")
     if verbose:
-        print(f"  \u2713 {n_cmds} commands generated ({timings['commands']}s)", file=sys.stderr)
+        fb_note = f", {result['_meta'].get('fallbacks_tried', 0)} fallbacks" if result['_meta'].get('fallbacks_tried', 0) else ""
+        print(f"  \u2713 {n_cmds} commands generated ({timings['commands']}s, {used}{fb_note})", file=sys.stderr)
 
     # Stage 4: Personality wrapping (optional, creative mode)
     if creative:
