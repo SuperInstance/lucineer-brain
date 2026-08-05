@@ -59,7 +59,8 @@ PLANNER_FALLBACKS = [
 # Each model gets its full retry budget before we move to the next.
 # The fast-mode single-model path (run_fast) is the ultimate last resort.
 CODER_FALLBACKS = [
-    "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",   # Primary: best quality
+    # Primary coder is MODELS["coder"], tried first by stage_commands.
+    # This list is the FALLBACK chain only (no primary duplicate).
     "Qwen/Qwen3-Coder-30B-A3B-Instruct",            # Fallback 1: smaller, less rate-limited
     "deepseek-ai/DeepSeek-V3",                        # Fallback 2: different provider, cheap
 ]
@@ -389,8 +390,11 @@ def stage_safety(api_key: str, reply: str, player_message: str) -> tuple[bool, s
         else:
             return False, f"ambiguous: {verdict[:60]}"
     except Exception as e:
-        print(f"  \u26a0 Safety stage error: {e}", file=sys.stderr)
-        return False, f"error: {e}"
+        # Fail OPEN: if the safety API is down, allow the reply through.
+        # Blocking everything because the safety service is unreachable would
+        # make the entire brain unusable during an outage.
+        print(f"  \u26a0 Safety API unreachable \u2014 failing open (allowing reply)", file=sys.stderr)
+        return True, f"safety check skipped (API error)"
 
 
 # ─── Pipeline Stages ──────────────────────────────────────────────────────────
@@ -726,7 +730,7 @@ def stage_commands(api_key: str, plan: dict, intent: dict, player_message: str) 
     """
     Stage 3: Generate build commands.
 
-    Tries coder models in order (CODER_FALLBACKS) with full retry budget each.
+    Tries MODELS["coder"] first, then each model in CODER_FALLBACKS.
     Only fails if every model in the chain is exhausted.
     The caller (run_pipeline) will then drop to fast mode as the ultimate last resort.
     """
@@ -750,7 +754,11 @@ def stage_commands(api_key: str, plan: dict, intent: dict, player_message: str) 
     used_model = None
     errors = []
 
-    for model_id in CODER_FALLBACKS:
+    # Primary coder first, then the fallback chain (CODER_FALLBACKS no longer
+    # includes the primary to avoid redundant retries)
+    coder_chain = [MODELS["coder"]] + [m for m in CODER_FALLBACKS if m != MODELS["coder"]]
+
+    for model_id in coder_chain:
         try:
             raw = call_model(
                 api_key,
@@ -923,6 +931,18 @@ def run_pipeline(
     used = plan["_meta"].get("model", "?")
     if verbose:
         print(f"  \u2713 {n_steps} steps planned ({timings['planning']}s, {used})", file=sys.stderr)
+
+    # If the planner completely failed (no steps), skip the coder stage
+    # and drop directly to fast mode. Sending an empty plan to the coder
+    # wastes a full coder timeout and produces garbage commands.
+    if not plan.get("steps"):
+        if verbose:
+            print("  ✕ Planner produced no steps — falling back to fast mode", file=sys.stderr)
+        result = run_fast(api_key, player_message, verbose=verbose, creative=creative)
+        result["_pipeline"] = result.get("_pipeline", {})
+        result["_pipeline"]["planner_failed"] = True
+        result["_pipeline"]["mode"] = "fast (planner fallback)"
+        return result
 
     # Stage 3: Command generation (with coder fallback chain)
     if verbose:

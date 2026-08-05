@@ -529,3 +529,108 @@ class TestFunctionSignatures:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ─── Fallback Chain & Graceful Degradation ──────────────────────────────────
+
+class TestCoderFallbackChain:
+    """Verify the coder fallback chain is well-structured (no redundant entries)."""
+
+    def test_coder_fallbacks_excludes_primary(self):
+        """CODER_FALLBACKS should NOT contain MODELS['coder'] — it's tried first
+        separately by stage_commands, so including it wastes a retry cycle."""
+        assert brain.MODELS["coder"] not in brain.CODER_FALLBACKS, \
+            "CODER_FALLBACKS should not include the primary coder model"
+
+    def test_coder_fallbacks_nonempty(self):
+        """At least one fallback model must exist."""
+        assert len(brain.CODER_FALLBACKS) >= 1
+
+    def test_coder_fallbacks_are_strings(self):
+        for model in brain.CODER_FALLBACKS:
+            assert isinstance(model, str)
+            assert "/" in model  # DeepInfra model format: org/model
+
+
+class TestSafetyFailOpen:
+    """The safety stage must FAIL OPEN on API errors, not block all replies."""
+
+    def test_safety_fails_open_on_exception(self):
+        """When call_model raises an exception, stage_safety should return (True, ...).
+        Blocking everything during a safety API outage would make the brain unusable."""
+        with patch("brain.call_model", side_effect=RuntimeError("API down")):
+            is_safe, reason = brain.stage_safety("fake-key", "a safe reply", "build a house")
+        assert is_safe is True, "Safety stage should fail OPEN (allow reply) on API error"
+        assert "skip" in reason.lower() or "error" in reason.lower()
+
+    def test_safety_blocks_unsafe_content(self):
+        """When the model returns UNSAFE, the reply should be blocked."""
+        with patch("brain.call_model", return_value="UNSAFE: profanity detected"):
+            is_safe, reason = brain.stage_safety("fake-key", "some reply", "bad words")
+        assert is_safe is False
+        assert "profanity" in reason.lower()
+
+    def test_safety_allows_safe_content(self):
+        """When the model returns SAFE, the reply should pass."""
+        with patch("brain.call_model", return_value="SAFE"):
+            is_safe, reason = brain.stage_safety("fake-key", "a nice house", "build a house")
+        assert is_safe is True
+
+    def test_safety_empty_reply_passes(self):
+        """Empty replies should pass the safety check without calling the API."""
+        is_safe, reason = brain.stage_safety("fake-key", "", "anything")
+        assert is_safe is True
+        assert "empty" in reason.lower()
+
+    def test_safety_whitespace_reply_passes(self):
+        """Whitespace-only replies should also short-circuit."""
+        is_safe, reason = brain.stage_safety("fake-key", "   \n\t  ", "anything")
+        assert is_safe is True
+
+
+class TestPlannerFailureDegradation:
+    """When the planner returns no steps, the pipeline should gracefully degrade."""
+
+    def test_planner_empty_steps_triggers_fast_fallback(self):
+        """If stage_plan returns no steps, run_pipeline should drop to fast mode
+        instead of sending an empty plan to the coder."""
+        api_key = "fake-key"
+        player_message = "build a house"
+
+        # Mock stage_intent to succeed
+        intent_result = {
+            "intent": "build",
+            "subject": "house",
+            "summary": "build a house",
+            "_meta": {"model": "test", "latency_s": 0.1, "raw": ""},
+        }
+
+        # Mock stage_plan to return empty steps (total failure)
+        plan_result = {
+            "steps": [],
+            "error": "All planner models failed",
+            "_meta": {"model": "none", "stage": "planner", "latency_s": 0.0, "raw": "", "fallbacks_tried": 2},
+        }
+
+        # Mock run_fast to return a valid result
+        fast_result = {
+            "reply": "Threw up a shell. Rough.",
+            "commands": [{"type": "createPart", "params": {"name": "wall"}}],
+            "_pipeline": {"mode": "fast"},
+        }
+
+        with patch("brain.stage_intent", return_value=intent_result), \
+             patch("brain.stage_plan", return_value=plan_result), \
+             patch("brain.run_fast", return_value=fast_result) as mock_fast, \
+             patch("brain.stage_commands") as mock_coder, \
+             patch("brain.stage_safety", return_value=(True, "safe")):
+
+            result = brain.run_pipeline(api_key, player_message, verbose=False)
+
+            # run_fast should have been called
+            mock_fast.assert_called_once()
+            # stage_commands should NOT have been called (planner failed)
+            mock_coder.assert_not_called()
+            # The result should come from fast mode
+            assert result["_pipeline"]["planner_failed"] is True
+            assert "fast" in result["_pipeline"]["mode"]
