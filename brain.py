@@ -33,6 +33,7 @@ import argparse
 import urllib.request
 import urllib.error
 import time
+import re
 from pathlib import Path
 
 # ─── Configuration ────────────────────────────────────────────────────────────
@@ -593,9 +594,63 @@ No markdown. No explanation. Just the JSON with the enhanced reply.
 """
 
 
+# ─── Emotional Detection (playtest fix: P1 — emotional intent classifier) ──────
+
+# Keywords that signal emotional state rather than a build request.
+# Detected in stage_intent before hitting the model, so the emotion
+# is woven into the plan and the voice from the very first stage.
+EMOTIONAL_KEYWORDS: dict[str, list[str]] = {
+    "scared":    ["scared", "afraid", "frightened", "terrified", "nervous", "anxious", "worried"],
+    "lonely":    ["lonely", "alone", "nobody", "no one", "miss you", "miss someone", "isolated"],
+    "sad":       ["sad", "depress", "unhappy", "crying", "tears", "heartbroken", "grief", "miserable"],
+    "happy":     ["happy", "excited", "thrilled", "delighted", "joyful", "yay", "love it", "awesome"],
+    "excited":   ["excited", "can't wait", "so pumped", "hyped", "stoked", "ecstatic"],
+    "angry":     ["angry", "mad", "furious", "pissed", "annoyed", "frustrated", "hate this", "stupid"],
+}
+
+# Lucineer's in-character acknowledgment for each emotion.
+# These are injected as emotional context into the planner and coder
+# so Lucineer acknowledges the feeling BEFORE building — never ignores it.
+EMOTIONAL_ACKNOWLEDGMENTS: dict[str, str] = {
+    "scared":    "Player sounds scared. Acknowledge it first — steady, grounded, not patronizing. Then build something solid and safe. A wall, a foundation, a shelter.",
+    "lonely":    "Player sounds lonely. Don't make it weird. Build something nearby — a bench, a fire pit — and leave space for them. Presence through craft.",
+    "sad":       "Player sounds sad. Don't cheer them up — that's cheap. Acknowledge it quietly, then build something careful and small. Let the work hold the feeling.",
+    "happy":     "Player's in a good mood. Match the energy without overdoing it. Build something with a flourish — extra detail, a surprise element.",
+    "excited":   "Player's excited. Keep pace — short sentences, quick build. Don't slow them down with deliberation. Get something in front of them fast.",
+    "angry":     "Player's frustrated. Don't tell them to calm down. Acknowledge the annoyance, then redirect to the work. Build something straightforward and satisfying — a wall they can point at.",
+}
+
+
+def detect_emotion(player_message: str) -> str | None:
+    """
+    Scan the player's message for emotional keywords.
+    Returns the first matched emotion category, or None.
+
+    Checked against the raw lowercased message before intent parsing,
+    so emotional context is available from stage 1 onward.
+
+    Priority order matches EMOTIONAL_KEYWORDS dict insertion:
+    scared > lonely > sad > happy > excited > angry.
+    This prioritizes vulnerability over positive emotions — if someone
+    says "I'm scared but excited," we address the fear first.
+    """
+    msg_lower = player_message.lower()
+    for emotion, keywords in EMOTIONAL_KEYWORDS.items():
+        for kw in keywords:
+            # Word-boundary match so "scared" doesn't hit "scarecrow"
+            if re.search(rf"\b{re.escape(kw)}\b", msg_lower):
+                return emotion
+    return None
+
+
 def stage_intent(api_key: str, player_message: str) -> dict:
     """Stage 1: Parse player intent with Seed-2.0-mini."""
     t0 = time.time()
+
+    # Pre-model emotional detection — runs before the LLM call so the
+    # emotion is available even if the model fails or returns garbage.
+    detected_emotion = detect_emotion(player_message)
+
     raw = call_model(
         api_key,
         MODELS["intent"],
@@ -620,6 +675,15 @@ def stage_intent(api_key: str, player_message: str) -> dict:
             "keywords": player_message.split(),
             "summary": player_message,
         }
+
+    # Inject emotional context into the intent so downstream stages
+    # (planner, coder, hermes) can adjust their behavior accordingly.
+    if detected_emotion:
+        parsed["emotion"] = detected_emotion
+        parsed["emotional_context"] = EMOTIONAL_ACKNOWLEDGMENTS.get(detected_emotion, "")
+        # Shift mood to match the detected emotion if the model left it neutral
+        if parsed.get("mood", "neutral") == "neutral":
+            parsed["mood"] = detected_emotion
 
     parsed["_meta"] = {"model": MODELS["intent"], "latency_s": round(elapsed, 2), "raw": raw[:200]}
     return parsed
@@ -819,6 +883,10 @@ def stage_hermes(api_key: str, result: dict, intent: dict, player_message: str) 
     Stage 4: Personality wrapping with Hermes-3-Llama-3.1-405B.
     Rewrites the reply text with Lucineer's character voice and lore.
     Passes through commands unchanged.
+
+    If the intent carries emotional_context (from detect_emotion in stage 1),
+    Hermes is instructed to acknowledge the player's emotion BEFORE talking
+    about the build — the playtest showed that ignoring "I'm scared" erodes trust.
     """
     t0 = time.time()
 
@@ -832,11 +900,30 @@ def stage_hermes(api_key: str, result: dict, intent: dict, player_message: str) 
     style = intent.get("style", "default")
     scale = intent.get("scale", "medium")
 
+    # ── Emotional context injection ────────────────────────────────────
+    # If stage_intent detected an emotion, tell Hermes to acknowledge it.
+    # This is the P1 fix from the playtest analysis: when a player says
+    # "I'm scared," Lucineer must address the fear before talking shop.
+    emotion = intent.get("emotion")
+    emotional_context = intent.get("emotional_context", "")
+    emotion_instructions = ""
+    if emotion and emotional_context:
+        emotion_instructions = (
+            f"\n\n⚠ EMOTIONAL CONTEXT — the player is feeling {emotion}.\n"
+            f"{emotional_context}\n"
+            f"You MUST acknowledge the emotion in your first sentence BEFORE "
+            f"describing the build. Don't be a therapist — just a foreman who "
+            f"notices. One sentence of acknowledgment, then get to work.\n"
+            f"Example for 'scared': 'I hear you. Let's get you somewhere solid.' "
+            f"Then describe what you built."
+        )
+
     user_content = (
         f"Player requested: \"{player_message}\"\n"
         f"Intent: {intent_brief} (mood: {mood}, style: {style}, scale: {scale})\n\n"
         f"Build result to enhance:\n{result_clean}\n\n"
         f"Rewrite ONLY the reply field with Lucineer's voice. Return the full JSON."
+        f"{emotion_instructions}"
     )
 
     try:
