@@ -1113,6 +1113,100 @@ def run_fast(
 
 # ─── Model Connectivity Test ──────────────────────────────────────────────────
 
+def health_check(api_key: str | None = None) -> dict:
+    """
+    Quick health check of the brain pipeline. Returns a dict with:
+      - api_key_loaded: bool
+      - models_configured: list of model names
+      - env_file_exists: bool
+      - can_reach_api: bool (tests a single lightweight call)
+      - timestamp: ISO format
+    Does NOT run the full pipeline — just checks infrastructure.
+    """
+    from datetime import datetime, timezone
+    health = {
+        "api_key_loaded": False,
+        "models_configured": list(MODELS.values()),
+        "env_file_exists": ENV_PATH.exists(),
+        "can_reach_api": False,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        key = api_key or load_api_key()
+        health["api_key_loaded"] = bool(key)
+    except RuntimeError:
+        return health
+
+    # Lightweight connectivity test — just try the intent model
+    try:
+        call_model(
+            key,
+            MODELS["intent"],
+            messages=[
+                {"role": "system", "content": "Reply with: ok"},
+                {"role": "user", "content": "ping"},
+            ],
+            max_tokens=10,
+            temperature=0.0,
+            timeout=30,
+            max_retries=1,
+        )
+        health["can_reach_api"] = True
+    except Exception:
+        pass
+
+    return health
+
+
+# ─── Response Cache ───────────────────────────────────────────────────────────
+
+_CACHE: dict[str, dict] = {}
+_CACHE_MAX = 100
+_CACHE_TTL = 3600  # 1 hour
+
+
+def _cache_key(player_message: str, mode: str = "full") -> str:
+    """Generate a cache key from the message and pipeline mode."""
+    return f"{mode}:{hash(player_message)}"
+
+
+def _cache_get(key: str) -> dict | None:
+    """Get a cached response if not expired."""
+    if key not in _CACHE:
+        return None
+    entry = _CACHE[key]
+    if time.time() - entry["_time"] > _CACHE_TTL:
+        del _CACHE[key]
+        return None
+    return entry["response"]
+
+
+def _cache_set(key: str, response: dict) -> None:
+    """Store a response in cache, evicting old entries if needed."""
+    if len(_CACHE) >= _CACHE_MAX:
+        # Evict oldest entry
+        oldest = min(_CACHE, key=lambda k: _CACHE[k]["_time"])
+        del _CACHE[oldest]
+    _CACHE[key] = {"response": response, "_time": time.time()}
+
+
+def cache_stats() -> dict:
+    """Return cache statistics."""
+    return {
+        "entries": len(_CACHE),
+        "max_entries": _CACHE_MAX,
+        "ttl_seconds": _CACHE_TTL,
+    }
+
+
+def cache_clear() -> int:
+    """Clear the cache. Returns number of entries removed."""
+    count = len(_CACHE)
+    _CACHE.clear()
+    return count
+
+
 def test_models(api_key: str) -> None:
     """Test each model with a simple prompt and report status."""
     print("Testing DeepInfra model connectivity...\n")
