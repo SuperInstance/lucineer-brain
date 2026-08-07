@@ -36,6 +36,8 @@ import time
 import re
 from pathlib import Path
 
+import response_validator
+
 # ─── Configuration ────────────────────────────────────────────────────────────
 
 ENV_PATH = Path("/home/eileen/mcp-deeinfra/.env")
@@ -863,11 +865,11 @@ def stage_commands(api_key: str, plan: dict, intent: dict, player_message: str) 
 
     parsed = extract_json(raw)
     if not parsed or not isinstance(parsed, dict):
-        parsed = {
-            "reply": f"I tried to build that but had trouble generating the commands. Raw output: {raw[:200]}",
-            "commands": [],
-            "error": "JSON parse failed",
-        }
+        # extract_json couldn't make sense of it — classify why (empty,
+        # truncated mid-stream, or malformed/dict-repr JSON) and hand back
+        # a voice-safe fallback instead of leaking raw text to the player.
+        validation = response_validator.validate_response(raw)
+        parsed = response_validator.fallback_response(validation.failure)
 
     parsed["_meta"] = {
         "model": used_model,
@@ -1147,12 +1149,9 @@ def run_fast(
 
     parsed = extract_json(raw)
     if not parsed or not isinstance(parsed, dict):
-        parsed = {
-            "reply": f"I heard you want: {player_message}, but I had trouble generating build commands.",
-            "commands": [],
-            "error": "JSON parse failed",
-            "raw": raw[:300],
-        }
+        validation = response_validator.validate_response(raw)
+        parsed = response_validator.fallback_response(validation.failure)
+        parsed["raw"] = raw[:300]
 
     parsed["_pipeline"] = {
         "mode": "fast",
