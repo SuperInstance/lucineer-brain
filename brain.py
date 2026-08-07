@@ -708,10 +708,26 @@ def stage_plan(
         ensure_ascii=False,
     )
 
+    # ── Emotional context passthrough ────────────────────────────────
+    # If stage_intent detected an emotion, tell the planner to adjust
+    # the build plan accordingly. A scared player gets a shelter, not a
+    # monument. A sad player gets something small and gentle, not a castle.
+    emotion = intent.get("emotion")
+    emotional_context = intent.get("emotional_context", "")
+    emotion_brief = ""
+    if emotion and emotional_context:
+        emotion_brief = (
+            f"\n\n⚠ EMOTIONAL CONTEXT: The player is feeling {emotion}.\n"
+            f"{emotional_context}\n"
+            f"Let this influence the build plan — choose materials, scale, "
+            f"and atmosphere that fit the player's emotional state.\n"
+        )
+
     user_content = (
         f'Player request: "{player_message}"\n\n'
         f"Parsed intent:\n{intent_brief}\n\n"
         f"Decompose this into build steps. Remember: return ONLY JSON."
+        f"{emotion_brief}"
     )
 
     if use_deep:
@@ -809,11 +825,28 @@ def stage_commands(api_key: str, plan: dict, intent: dict, player_message: str) 
     )
     intent_brief = intent.get("summary", player_message)
 
+    # ── Emotional context passthrough ────────────────────────────────
+    # If stage_intent detected an emotion, tell the coder to adjust
+    # the build commands accordingly. Materials, lighting, and scale
+    # should all respond to the player's emotional state.
+    emotion = intent.get("emotion")
+    emotional_context = intent.get("emotional_context", "")
+    emotion_brief = ""
+    if emotion and emotional_context:
+        emotion_brief = (
+            f"\n\n⚠ EMOTIONAL CONTEXT: The player is feeling {emotion}.\n"
+            f"{emotional_context}\n"
+            f"The reply field MUST acknowledge the emotion in its first sentence "
+            f"BEFORE describing the build. One sentence of acknowledgment, then "
+            f"get to work. Don't be a therapist — just a foreman who notices.\n"
+        )
+
     user_content = (
         f"Player wants: \"{player_message}\"\n"
         f"Intent summary: {intent_brief}\n\n"
         f"Build plan:\n{plan_clean}\n\n"
         f"Generate the build commands JSON now. ONLY raw JSON, no markdown."
+        f"{emotion_brief}"
     )
 
     raw = None

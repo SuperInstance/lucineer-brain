@@ -1,0 +1,318 @@
+{
+  "timestamp": "2026-08-06T18:48:22.373151",
+  "target": "https://lucineer-relay.casey-digennaro.workers.dev",
+  "health": null,
+  "summary": {
+    "total": 20,
+    "avg_score": 0.0,
+    "avg_time_s": 0.2,
+    "success_rate": 0.0,
+    "failure_rate": 100.0
+  },
+  "categories": {
+    "basic": {
+      "avg_score": 0.0,
+      "count": 5
+    },
+    "creative": {
+      "avg_score": 0.0,
+      "count": 5
+    },
+    "emotional": {
+      "avg_score": 0.0,
+      "count": 4
+    },
+    "edge": {
+      "avg_score": 0.0,
+      "count": 4
+    },
+    "iterative": {
+      "avg_score": 0.0,
+      "count": 2
+    }
+  },
+  "failures": [
+    {
+      "message": "build me a tower",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "make a small house",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "build a castle",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "build a bridge",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "build a windmill",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "build a cozy fishing cottage by the water",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "create an abandoned lighthouse on a rocky cliff",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "build a mysterious garden with strange flowers",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "make an ancient stone temple covered in vines",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "build a wooden dock extending into foggy water",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "I'm scared, build me somewhere safe",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "I feel lonely, build something",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "I'm sad, just build something small",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "I'm so happy! Build me a celebration tower",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "build nothing",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "build a structure with exactly 0 parts",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "build a portal to another dimension",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "make the last build taller",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    },
+    {
+      "message": "add a roof to it",
+      "notes": "Error: HTTP 403: error code: 1010\n"
+    }
+  ],
+  "results": [
+    {
+      "message": "build me a tower",
+      "expect": "template",
+      "category": "basic",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.13577532768249512
+      }
+    },
+    {
+      "message": "make a small house",
+      "expect": "template",
+      "category": "basic",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.14343714714050293
+      }
+    },
+    {
+      "message": "build a castle",
+      "expect": "template",
+      "category": "basic",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.15434813499450684
+      }
+    },
+    {
+      "message": "build a bridge",
+      "expect": "template",
+      "category": "basic",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.14760613441467285
+      }
+    },
+    {
+      "message": "build a windmill",
+      "expect": "template",
+      "category": "basic",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.15163397789001465
+      }
+    },
+    {
+      "message": "build a cozy fishing cottage by the water",
+      "expect": "deep",
+      "category": "creative",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.18189144134521484
+      }
+    },
+    {
+      "message": "create an abandoned lighthouse on a rocky cliff",
+      "expect": "deep",
+      "category": "creative",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.15529346466064453
+      }
+    },
+    {
+      "message": "build a mysterious garden with strange flowers",
+      "expect": "deep",
+      "category": "creative",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.1922919750213623
+      }
+    },
+    {
+      "message": "make an ancient stone temple covered in vines",
+      "expect": "deep",
+      "category": "creative",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.20279550552368164
+      }
+    },
+    {
+      "message": "build a wooden dock extending into foggy water",
+      "expect": "deep",
+      "category": "creative",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.15711688995361328
+      }
+    },
+    {
+      "message": "I'm scared, build me somewhere safe",
+      "expect": "emotional",
+      "category": "emotional",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.17991876602172852
+      }
+    },
+    {
+      "message": "I feel lonely, build something",
+      "expect": "emotional",
+      "category": "emotional",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.1532585620880127
+      }
+    },
+    {
+      "message": "I'm sad, just build something small",
+      "expect": "emotional",
+      "category": "emotional",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.2068631649017334
+      }
+    },
+    {
+      "message": "I'm so happy! Build me a celebration tower",
+      "expect": "emotional",
+      "category": "emotional",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.13645553588867188
+      }
+    },
+    {
+      "message": "build nothing",
+      "expect": "any",
+      "category": "edge",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.14748096466064453
+      }
+    },
+    {
+      "message": "build a structure with exactly 0 parts",
+      "expect": "any",
+      "category": "edge",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.16786646842956543
+      }
+    },
+    {
+      "message": "build a portal to another dimension",
+      "expect": "any",
+      "category": "edge",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.18433046340942383
+      }
+    },
+    {
+      "message": "",
+      "expect": "error",
+      "category": "edge",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.16257596015930176
+      }
+    },
+    {
+      "message": "make the last build taller",
+      "expect": "any",
+      "category": "iterative",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.18490242958068848
+      }
+    },
+    {
+      "message": "add a roof to it",
+      "expect": "any",
+      "category": "iterative",
+      "scored": {
+        "score": 0,
+        "notes": "Error: HTTP 403: error code: 1010\n",
+        "elapsed": 0.2108936309814453
+      }
+    }
+  ]
+}
