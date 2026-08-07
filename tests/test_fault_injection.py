@@ -16,9 +16,7 @@ All tests mock brain.call_model to avoid real API calls.
 import json
 import sys
 import time
-import urllib.error
 from unittest.mock import patch, MagicMock, call
-from io import StringIO
 
 import pytest
 

@@ -20,7 +20,6 @@ import json
 import sys
 import time
 from unittest.mock import patch, MagicMock, call
-from io import StringIO
 
 import pytest
 
